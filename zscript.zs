@@ -337,7 +337,6 @@ class ArcSplitController : Inventory
 				}
 				thing = lightningVictims[i];
 				if (!thing || // null pointer
-					thing.health <= 0 || // dead
 					owner.Distance3DSquared(thing) > distanceSq || // too far
 					!owner.CheckSight(thing) ) // out of LoS
 				{
@@ -402,9 +401,9 @@ class ArcSplitController : Inventory
 		if (ac_delay > 0)
 		{
 			ac_delay--;
-			return;
 		}
-		if (ac_duration > 0)
+		
+		else if (ac_duration > 0)
 		{
 			if (ac_maxLinks <= 0 || ac_stage <= ac_maxLinks)
 			{
@@ -481,7 +480,7 @@ class LightningGun : PlasmaRifle
 	// This is more of a 'shotgun' of sorts; it creates shorter chains,
 	// but they split into more arcs per victim:
 	AltFire:
-		PLSG A 20 A_FireLightningGun(5, useammo: false, spawnheight: -10, range: 512, duration: 30, delay: 20, maxsplits: 4, maxlinks: 2);
+		PLSG A 20 A_FireLightningGun(5, useammo: false, spawnheight: -10, range: 512, duration: 30, delay: 20, maxsplits: 4, maxlinks: 3);
 		PLSG B 20 A_ReFire;
 		Goto Ready;
 	}
