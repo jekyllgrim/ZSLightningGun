@@ -43,8 +43,7 @@ class ArcSplitController : Inventory
 			return 0;
 		
 		let player = source.player;
-		double bobFac = player.viewz - (source.pos.z + player.mo.ViewHeight + player.crouchviewdelta);
-		return source.height*0.5 + bobFac - source.floorclip + player.mo.AttackZOffset*player.crouchFactor;
+		return source.height*0.5 - source.floorclip + player.mo.AttackZOffset*player.crouchFactor;
 	}
 
 	// Allows specifying a relative offset (forward/leftright/updown) and converts it
@@ -96,7 +95,8 @@ class ArcSplitController : Inventory
 	// range		: the range of the lightning (will be passed to further arcs)
 	// duration		: how long a single arc persists
 	// delay		: delay between further arcs are created from the victim
-	// maxSplits	: maximum number of chains that can be created
+	// maxSplits	: maximum number of arcs that can be fired from a single victim
+	// maxlinks		: how many total victims can be hit by a single lightning chain
 	// parent		: this is used only by ExtendChain(), to create a new lightning parented to the same controller
 	static ArcSplitController StartChain(Actor damageSource, Actor victim, int damage, double range, int duration = 1, int delay = 0, int maxSplits = 1, int maxLinks = 0, ArcSplitController parent = null)
 	{
@@ -141,7 +141,54 @@ class ArcSplitController : Inventory
 		StartChain(ac_damagesource, nextVictim, ac_damagePerArc, ac_maxDistance, ac_duration_init, ac_delay_init, ac_maxSplits, ac_maxLinks, self);
 	}
 
-	// Dedicated function to draw a particle beam between two points
+	// Gets a bunch of randomly offset points from one position to a nother,
+	// then calls DrawLightningSegment() between each of those points to create
+	// a jagged particle-based lightning.
+	// Arguments are the same as in DrawLightningSegment(), just passed to it.
+	static void DrawLightning(Vector3 from, Vector3 to, bool spawnSpark = true, PlayerInfo playersource = null)
+	{
+		let diff = Level.Vec3Diff(from, to);
+		let dir = diff.Unit();
+		let dist = diff.Length();
+		double nodeDist = Clamp(dist / 10, min(8, dist), min(80, dist));
+		int steps = nodeDist < dist? floor(dist / nodeDist) : 1;
+		double ofss = nodeDist / 4.0;
+
+		array <double> litPosX;
+		array <double> litPosY;
+		array <double> litPosZ;
+		Vector3 partPos = from;
+		Vector3 node;
+		for (int i = 1; i <= steps; i++)
+		{
+			partPos += dir*nodeDist;
+			node = partPos;
+			if (i < steps)
+			{
+				node += (frandom[lightningpart](-ofss, ofss), 
+						frandom[lightningpart](-ofss, ofss), 
+						frandom[lightningpart](-ofss, ofss));
+			}
+			litPosX.Push(node.x);
+			litPosY.Push(node.y);
+			litPosZ.Push(node.z);
+		}
+
+		steps = min(litPosX.Size(), litPosY.Size(), litPosZ.Size());
+		for (int i = 0; i < steps; i++)
+		{
+			node.x = litPosX[i];
+			node.y = litPosY[i];
+			node.z = litPosZ[i];
+			ArcSplitController.DrawLightningSegment(from, node, density: 1, size: 4, posOfs: 0, spawnSpark: (spawnSpark && i == steps - 1), playersource: playersource);
+			from = node;
+		}
+	}
+
+	// Dedicated function to draw a particle beam between two points.
+	// YOU CAN COMPLETELY REPLACE THIS to change the visuals of your lightning.
+	// This function is just an example of how a lightning can look (mostly because
+	// I just wanted to make a decently-looking lightning using only particles).
 	// from			: starting position
 	// to			: end position
 	// density		: per how many units to draw a particle
@@ -151,7 +198,7 @@ class ArcSplitController : Inventory
 	// playerSource	: pass a PlayerInfo pointer here if this is being fired by the player.
 	// (If playerSouce is non-null, PlayerPawn's velocity will be added to particles for
 	// interpolatin purposes.)
-	static void DrawLightningBeam(Vector3 from, Vector3 to, double density = 8, double size = 10, double posOfs = 2, bool spawnSpark = true, PlayerInfo playerSource = null)
+	static void DrawLightningSegment(Vector3 from, Vector3 to, double density = 8, double size = 10, double posOfs = 2, bool spawnSpark = true, PlayerInfo playerSource = null)
 	{
 		let diff = Level.Vec3Diff(from, to); // difference between two points
 		let dir = diff.Unit(); // direction from point 1 to point 2
@@ -190,7 +237,7 @@ class ArcSplitController : Inventory
 		}
 
 		// If spawnspark is true, spawn some sparks at the end position:
-		pp.size = 2.5;
+		pp.size = size * 0.3;
 		pp.lifetime = 30;
 		pp.sizestep = -(pp.size / pp.lifetime);
 		pp.pos = to;
@@ -202,50 +249,6 @@ class ArcSplitController : Inventory
 			pp.vel.z = frandom[lightningpart](2, 6);
 			pp.accel.xy = -(pp.vel.xy / pp.lifetime);
 			Level.SpawnParticle(pp);
-		}
-	}
-
-	// Gets a bunch of randomly offset points from one position to a nother,
-	// then calls DrawLightningBeam() between each of those points to create
-	// a jagged particle-based lightning.
-	// Arguments are the same as in DrawLightningBeam(), just passed to it.
-	static void DrawRealisticLightning(Vector3 from, Vector3 to, bool spawnSpark = true, PlayerInfo playersource = null)
-	{
-		let diff = Level.Vec3Diff(from, to);
-		let dir = diff.Unit();
-		let dist = diff.Length();
-		double nodeDist = Clamp(dist / 10, min(8, dist), min(80, dist));
-		int steps = nodeDist < dist? floor(dist / nodeDist) : 1;
-		double ofss = nodeDist / 4.0;
-
-		array <double> litPosX;
-		array <double> litPosY;
-		array <double> litPosZ;
-		Vector3 partPos = from;
-		Vector3 node;
-		for (int i = 1; i <= steps; i++)
-		{
-			partPos += dir*nodeDist;
-			node = partPos;
-			if (i < steps)
-			{
-				node += (frandom[lightningpart](-ofss, ofss), 
-						frandom[lightningpart](-ofss, ofss), 
-						frandom[lightningpart](-ofss, ofss));
-			}
-			litPosX.Push(node.x);
-			litPosY.Push(node.y);
-			litPosZ.Push(node.z);
-		}
-
-		steps = min(litPosX.Size(), litPosY.Size(), litPosZ.Size());
-		for (int i = 0; i < steps; i++)
-		{
-			node.x = litPosX[i];
-			node.y = litPosY[i];
-			node.z = litPosZ[i];
-			ArcSplitController.DrawLightningBeam(from, node, density: 1, size: 4, posOfs: 0, spawnSpark: (spawnSpark && i == steps - 1), playersource: playersource);
-			from = node;
 		}
 	}
 
@@ -286,6 +289,7 @@ class ArcSplitController : Inventory
 	{
 		let bti = BlockThingsIterator.Create(owner, ac_maxDistance);
 		Actor thing;
+		double distanceSq = ac_maxDistance**2;
 		while (bti.Next())
 		{
 			thing = bti.thing;
@@ -294,19 +298,12 @@ class ArcSplitController : Inventory
 			// skip conditions:
 			if (thing == owner || //is the owner
 				thing == ac_damageSource || //is the shooter
-				thing.FindInventory(self.GetClass()) ||
 				!(thing.bISMONSTER || thing.player) || //not a monster or a player
 				thing.health <= 0 || //dead
-				!thing.IsHostile(ac_damageSource) || //not hostile to owner
-				owner.Distance3D(thing) > ac_maxDistance || //too far
+				thing.FindInventory(self.GetClass()) || // already being hit by lightning
+				thing.IsFriend(ac_damageSource) || //not hostile to owner
+				owner.Distance3DSquared(thing) > distanceSq || //too far
 				!owner.CheckSight(thing) )// owner has no LoS to thing
-			{
-				continue;
-			}
-			// Also skip this actor if it's already being hit by
-			// a lightning from the same controller:
-			ArcSplitController ac = ArcSplitController(thing.FindInventory('ArcSplitController'));
-			if (ac && ac.GetParentController() == GetParentController())
 			{
 				continue;
 			}
@@ -321,7 +318,7 @@ class ArcSplitController : Inventory
 	}
 
 	// Updates the array of victims to remove the ones that
-	// no longer fit the criteria:
+	// no longer fit the criteria, then find new ones:
 	void UpdateVictims()
 	{
 		if (lightningVictims.Size() > 0)
@@ -415,7 +412,7 @@ class ArcSplitController : Inventory
 					if (v)
 					{
 						ExtendChainTo(v);
-						DrawRealisticLightning(GetBeamAttachPos(owner), GetBeamAttachPos(v));
+						DrawLightning(GetBeamAttachPos(owner), GetBeamAttachPos(v));
 					}
 				}
 			}
@@ -466,7 +463,7 @@ class LightningGun : PlasmaRifle
 		{
 			beamEnd = tr.HitLocation;
 		}
-		ArcSplitController.DrawRealisticLightning(beamstart, beamend, spawnSpark: (tr.HitType != TRACE_HitNone), playersource: player);
+		ArcSplitController.DrawLightning(beamstart, beamend, spawnSpark: (tr.HitType != TRACE_HitNone), playersource: player);
 	}
 
 	States
@@ -483,44 +480,5 @@ class LightningGun : PlasmaRifle
 		PLSG A 20 A_FireLightningGun(5, useammo: false, spawnheight: -10, range: 512, duration: 30, delay: 20, maxsplits: 4, maxlinks: 3);
 		PLSG B 20 A_ReFire;
 		Goto Ready;
-	}
-}
-
-class FloatingNumber : Actor
-{
-	Default
-	{
-		+NOBLOCKMAP
-		scale 1.5;
-	}
-
-	override void Tick()
-	{
-		if (isFrozen())
-			return;
-		SetZ(pos.z+0.75);
-		if (GetAge() > 25)
-			A_FadeOut(0.25);
-	}
-
-	static void SpawnFloatingNumber(Vector3 numpos, int number)
-	{
-		string numstring = String.Format("%d", number);
-		int len = numstring.CodePointCount();
-		for (int i = 0; i < len; i++)
-		{
-			let fnum = Spawn("FloatingNumber", numpos);
-			if (fnum)
-			{
-				fnum.A_SpriteOffset(i * 8 * fnum.scale.x);
-				fnum.frame = numstring.ByteAt(i) - int("0");	
-			}
-		}
-	}
-	
-	States {
-	Spawn:
-		TDNU A -1;
-		stop;
 	}
 }
