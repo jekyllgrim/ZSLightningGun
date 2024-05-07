@@ -48,10 +48,10 @@ class ArcSplitController : Inventory
 
 	// Allows specifying a relative offset (forward/leftright/updown) and converts it
 	// to proper world coordinates:
-	// startpos		: initial position
+	// startpos	: initial position
 	// viewangles	: angle, pitch, roll
-	// offset		: forward/backward, right/left, up/down
-	// isPosition	: if false, adds startPos to result (only useful for velocity); if true, doesn't
+	// offset	: forward/backward, right/left, up/down
+	// isPosition	: if true, adds startPos to result (only useful for velocity); otherwise doesn't
 	static Vector3 RelativeToGlobalCoords(Vector3 startpos, Vector3 viewAngles, Vector3 offset, bool isPosition = true)
 	{
 		Quat dir = Quat.FromAngles(viewAngles.x, viewAngles.y, viewAngles.z);
